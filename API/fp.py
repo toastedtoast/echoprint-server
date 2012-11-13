@@ -41,6 +41,7 @@ class Response(object):
         self.score = score
         self.total_time = int(time.time()*1000) - tic
         self.metadata = metadata
+        self.position = "TESTTIME"
 
     def __len__(self):
         if self.TRID is not None:
