@@ -329,11 +329,11 @@ def fetch_position(trackid):
 	
 	if splits >= 2:
 		part = trackid.split("-")[1].replace("p", "")
-		position += part * 1500
+		position += num(part) * 1500
 	
 	if splits >= 3:
 		part = trackid.split("-")[2]
-		position += part * 30
+		position += num(part) * 30
 		
 	return position    
 
@@ -648,6 +648,12 @@ def new_track_id():
     ## a longint. On 64-bit it is not.
     hexpoch = hexpoch.rstrip('L')
     return "TR" + rand5 + hexpoch
+    
+def num(s):
+    try:
+        return int(s)
+    except exceptions.ValueError:
+        return float(s)
 
 
     
