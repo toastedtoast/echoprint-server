@@ -34,14 +34,14 @@ class Response(object):
     NOT_ENOUGH_CODE, CANNOT_DECODE, SINGLE_BAD_MATCH, SINGLE_GOOD_MATCH, NO_RESULTS, MULTIPLE_GOOD_MATCH_HISTOGRAM_INCREASED, \
         MULTIPLE_GOOD_MATCH_HISTOGRAM_DECREASED, MULTIPLE_BAD_HISTOGRAM_MATCH, MULTIPLE_GOOD_MATCH = range(9)
 
-    def __init__(self, code, TRID=None, score=0, qtime=0, tic=0, metadata={}):
+    def __init__(self, code, TRID=None, score=0, qtime=0, tic=0, metadata={}, position=0):
         self.code = code
         self.qtime = qtime
         self.TRID = TRID
         self.score = score
         self.total_time = int(time.time()*1000) - tic
         self.metadata = metadata
-        self.position = "TESTTIME"
+        self.position = position
 
     def __len__(self):
         if self.TRID is not None:
@@ -170,11 +170,15 @@ def best_match_for_query(code_string, elbow=10, local=False):
     # If we just had one result, make sure that it is close enough. We rarely if ever have a single match so this is not helpful (and probably doesn't work well.)
     top_match_score = int(response.results[0]["score"])
     if len(response.results) == 1:
+    
         trackid = response.results[0]["track_id"]
-        trackid = trackid.split("-")[0] # will work even if no `-` in trid
-        meta = metadata_for_track_id(trackid, local=local)
+        metaTrackid = trackid.split("-")[0] # will work even if no `-` in trid
+        
+        position = fetch_position(trackid)
+        
+        meta = metadata_for_track_id(metaTrackid, local=local)
         if code_len - top_match_score < elbow:
-            return Response(Response.SINGLE_GOOD_MATCH, TRID=trackid, score=top_match_score, qtime=response.header["QTime"], tic=tic, metadata=meta)
+            return Response(Response.SINGLE_GOOD_MATCH, TRID=metaTrackid, score=top_match_score, qtime=response.header["QTime"], tic=tic, metadata=meta, position=position)
         else:
             return Response(Response.SINGLE_BAD_MATCH, qtime=response.header["QTime"], tic=tic)
 
@@ -231,9 +235,12 @@ def best_match_for_query(code_string, elbow=10, local=False):
             if top_score > (original_scores[top_track_id] / 2): 
                 logger.info("top_score > original_scores[%s]/2 (%d > %d) GOOD_MATCH_DECREASED",
                     top_track_id, top_score, original_scores[top_track_id]/2)
+                    
                 trid = top_track_id.split("-")[0]
+                position = fetch_position(trid)
                 meta = metadata_for_track_id(trid, local=local)
-                return Response(Response.MULTIPLE_GOOD_MATCH_HISTOGRAM_DECREASED, TRID=trid, score=top_score, qtime=response.header["QTime"], tic=tic, metadata=meta)
+                
+                return Response(Response.MULTIPLE_GOOD_MATCH_HISTOGRAM_DECREASED, TRID=trid, score=top_score, qtime=response.header["QTime"], tic=tic, metadata=meta, position=position)
             else:
                 logger.info("top_score NOT > original_scores[%s]/2 (%d <= %d) BAD_HISTOGRAM_MATCH",
                     top_track_id, top_score, original_scores[top_track_id]/2)
@@ -245,6 +252,7 @@ def best_match_for_query(code_string, elbow=10, local=False):
     (actual_score_2nd_track_id, actual_score_2nd_score) = sorted_actual_scores[1]
 
     trackid = actual_score_top_track_id.split("-")[0]
+    position = fetch_position(actual_score_top_track_id)
     meta = metadata_for_track_id(trackid, local=local)
     
     if actual_score_top_score < code_len * 0.05:
@@ -253,7 +261,7 @@ def best_match_for_query(code_string, elbow=10, local=False):
         # If the actual score went down it still could be close enough, so check for that
         if actual_score_top_score > (original_scores[actual_score_top_track_id] / 4): 
             if (actual_score_top_score - actual_score_2nd_score) >= (actual_score_top_score / 3):  # for examples [10,4], 10-4 = 6, which >= 5, so OK
-                return Response(Response.MULTIPLE_GOOD_MATCH_HISTOGRAM_DECREASED, TRID=trackid, score=actual_score_top_score, qtime=response.header["QTime"], tic=tic, metadata=meta)
+                return Response(Response.MULTIPLE_GOOD_MATCH_HISTOGRAM_DECREASED, TRID=trackid, score=actual_score_top_score, qtime=response.header["QTime"], tic=tic, metadata=meta, position=position)
             else:
                 return Response(Response.MULTIPLE_BAD_HISTOGRAM_MATCH, qtime = response.header["QTime"], tic=tic)
         else:
@@ -311,7 +319,23 @@ def actual_matches(code_string_query, code_string_match, slop = 2, elbow = 10):
         return actual_match_list[0][1] + actual_match_list[1][1]
     if(len(actual_match_list)>0):
         return actual_match_list[0][1]
-    return 0        
+    return 0    
+   
+def fetch_position(trackid):
+
+	#prdct uses 3 part track ids ([track_id]-p[#]-[#]). There might be short sounds that do only have 2 parts to so beware
+	splits = len(trackid.split("-"))
+	position = 0
+	
+	if splits >= 2:
+		part = trackid.split("-")[1].replace("p", "")
+		position += part * 1500
+	
+	if splits >= 3:
+		part = trackid.split("-")[2]
+		position += part * 30
+		
+	return position    
 
 def get_tyrant():
     global _tyrant
